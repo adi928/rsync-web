@@ -1,0 +1,21 @@
+=== Backup started at 2026-01-31T12:05:34-08:00 ===
+Command: rsync -avz --delete --stats -e ssh -i ~/.ssh/homeserv -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /Users/adityanath/anthropic-jd.txt/ adita@192.168.254.91:/home/adita/
+
+Warning: Permanently added '192.168.254.91' (ED25519) to the list of known hosts.
+rsync(81197): error: /Users/adityanath/anthropic-jd.txt/: (l)stat: Not a directory
+Transfer starting: 0 files
+Number of files: 0
+Number of files transferred: 0
+Total file size: 0 B
+Total transferred file size: 0 B
+Unmatched data: 0 B
+Matched data: 0 B
+File list size: 13 B
+Total sent: 33 B
+Total received: 20 B
+
+sent 33 bytes  received 20 bytes  6543 bytes/sec
+total size is 0  speedup is 0.00
+rsync(81197): warning: child 81198 exited with status 23
+
+=== Backup finished at 2026-01-31T12:05:44-08:00 (exit code: 23) ===

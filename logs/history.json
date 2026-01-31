@@ -1,0 +1,62 @@
+[
+  {
+    "id": "20260131-122933",
+    "start_time": "2026-01-31T12:29:33.370336-08:00",
+    "end_time": "2026-01-31T12:29:41.62475-08:00",
+    "duration": "8s",
+    "status": "success",
+    "exit_code": 0,
+    "log_file": "backup-20260131-122933.log",
+    "summary": "completed successfully"
+  },
+  {
+    "id": "20260131-121650",
+    "start_time": "2026-01-31T12:16:50.823784-08:00",
+    "end_time": "2026-01-31T12:16:50.944142-08:00",
+    "duration": "0s",
+    "status": "failed",
+    "exit_code": 255,
+    "log_file": "backup-20260131-121650.log",
+    "summary": "failed: exit status 255"
+  },
+  {
+    "id": "20260131-121502",
+    "start_time": "2026-01-31T12:15:02.285185-08:00",
+    "end_time": "2026-01-31T12:15:02.39391-08:00",
+    "duration": "0s",
+    "status": "failed",
+    "exit_code": 255,
+    "log_file": "backup-20260131-121502.log",
+    "summary": "failed: exit status 255"
+  },
+  {
+    "id": "20260131-121212",
+    "start_time": "2026-01-31T12:12:12.025202-08:00",
+    "end_time": "2026-01-31T12:12:21.602709-08:00",
+    "duration": "9s",
+    "status": "failed",
+    "exit_code": 23,
+    "log_file": "backup-20260131-121212.log",
+    "summary": "failed: exit status 23"
+  },
+  {
+    "id": "20260131-121006",
+    "start_time": "2026-01-31T12:10:06.740681-08:00",
+    "end_time": "2026-01-31T12:10:08.667373-08:00",
+    "duration": "1s",
+    "status": "failed",
+    "exit_code": 23,
+    "log_file": "backup-20260131-121006.log",
+    "summary": "failed: exit status 23"
+  },
+  {
+    "id": "20260131-120534",
+    "start_time": "2026-01-31T12:05:34.895178-08:00",
+    "end_time": "2026-01-31T12:05:44.170847-08:00",
+    "duration": "9s",
+    "status": "failed",
+    "exit_code": 23,
+    "log_file": "backup-20260131-120534.log",
+    "summary": "failed: exit status 23"
+  }
+]

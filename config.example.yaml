@@ -1,0 +1,63 @@
+# Plex Backup Configuration
+# Copy this file to config.yaml and fill in your values.
+
+# Source path to back up — can be a directory or a single file.
+# Directory example (syncs the contents of the directory):
+#   source_path: /mnt/plex-media
+# File example (syncs a single file):
+#   source_path: /mnt/plex-media/important-archive.tar.gz
+#   source_is_file: true
+source_path: /mnt/plex-media
+
+# Set to true if source_path points to a single file instead of a directory.
+# When false (default), a trailing slash is added so rsync syncs directory contents.
+# When true, the path is used as-is for single-file transfer.
+source_is_file: false
+
+# Remote backup destination (user@host format)
+remote_host: user@backup-server.example.com
+
+# Path on the remote server where the backup will be stored
+remote_path: /backups/plex-media
+
+# SSH private key for authenticating to the remote server.
+#
+# IMPORTANT: This key must NOT have a passphrase — the backup runs
+# unattended and cannot prompt for one. Generate a dedicated key pair
+# for backups only:
+#
+#   ssh-keygen -t ed25519 -f ~/.ssh/plex-backup -N "" -C "plex-backup@shamsher-1"
+#
+# Then on the REMOTE backup server, add this to ~/.ssh/authorized_keys
+# with a command= restriction so the key can ONLY run rsync:
+#
+#   command="rsync --server -vlogDtprze.iLsfxCIvu --delete --partial . /backups/plex-media/",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA... plex-backup@shamsher-1
+#
+# To get the exact --server args rsync expects, do a dry run:
+#   rsync -avz --delete --partial -e "ssh -i ~/.ssh/plex-backup" --dry-run /mnt/plex-media/ user@host:/backups/plex-media/
+# and check the remote syslog or use: command="echo $SSH_ORIGINAL_COMMAND" in
+# authorized_keys temporarily to capture the exact command string.
+#
+# This way the key has no passphrase (automation works), but even if
+# compromised it can only write to /backups/plex-media/ via rsync.
+ssh_key_path: ~/.ssh/plex-backup
+
+# Cron schedule expression (when to run automatic backups)
+# Examples:
+#   "0 3 * * *"    — daily at 3:00 AM
+#   "0 3 * * 0"    — weekly on Sunday at 3:00 AM
+#   "0 */6 * * *"  — every 6 hours
+schedule: "0 3 * * *"
+
+# Bandwidth limit in KB/s (0 = unlimited)
+# Useful to avoid saturating your upload during peak hours
+bandwidth_limit: 0
+
+# Address and port for the web dashboard
+listen_addr: ":8090"
+
+# Directory to store backup log files
+log_dir: ./logs
+
+# Maximum number of log files to keep (oldest are pruned)
+max_log_files: 30

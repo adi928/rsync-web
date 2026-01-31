@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plex Backup Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Plex Backup</h1>
+            <p class="subtitle">rsync mirror &middot; {{.Source}} &rarr; {{.Dest}}</p>
+        </header>
+
+        <div id="status-card" hx-get="/fragment/status" hx-trigger="every 5s, backup-started from:body" hx-swap="outerHTML">
+            {{template "status-card" .}}
+        </div>
+
+        <section class="section">
+            <h2>History</h2>
+            <div id="history-table" hx-get="/fragment/history" hx-trigger="every 10s" hx-swap="outerHTML">
+                {{template "history-table" .}}
+            </div>
+        </section>
+
+        <section class="section" id="log-viewer">
+            <h2>Log Output</h2>
+            <div id="log-content" class="log-box">
+                <p class="muted">Select a backup run above to view its log.</p>
+            </div>
+        </section>
+    </div>
+</body>
+</html>
+
+{{define "status-card"}}
+<div id="status-card" hx-get="/fragment/status" hx-trigger="every 5s, backup-started from:body" hx-swap="outerHTML" class="card status-card">
+    <div class="status-grid">
+        <div class="status-item">
+            <span class="label">Status</span>
+            <span class="badge {{statusClass .Status}}">{{.Status}}</span>
+        </div>
+        <div class="status-item">
+            <span class="label">Schedule</span>
+            <span class="value">{{.Schedule}}</span>
+        </div>
+        <div class="status-item">
+            <span class="label">Next Run</span>
+            <span class="value">{{formatTime .NextRun}}</span>
+        </div>
+        <div class="status-item">
+            <span class="label">Last Run</span>
+            {{if .LastRun}}
+            <span class="value">{{formatTime .LastRun.StartTime}}</span>
+            {{else}}
+            <span class="value muted">never</span>
+            {{end}}
+        </div>
+        {{if .LastRun}}
+        <div class="status-item">
+            <span class="label">Duration</span>
+            <span class="value">{{.LastRun.Duration}}</span>
+        </div>
+        <div class="status-item">
+            <span class="label">Result</span>
+            <span class="badge {{statusClass .LastRun.Status}}">{{.LastRun.Summary}}</span>
+        </div>
+        {{if eq .LastRun.Status "warning"}}
+        <div class="status-hint warning-hint">
+            Partial transfer &mdash; most files synced but some were skipped (exit code {{.LastRun.ExitCode}}). Re-running will retry the skipped files.
+        </div>
+        {{else if eq .LastRun.Status "failed"}}
+        <div class="status-hint failed-hint">
+            Backup failed (exit code {{.LastRun.ExitCode}}). Check the log for details.
+        </div>
+        {{end}}
+        {{end}}
+    </div>
+    {{if not .History}}
+    <div id="remote-warning"
+         hx-get="/fragment/remote-warning"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+    </div>
+    {{end}}
+    <div class="actions">
+        {{if eq .Status "running"}}
+        <button class="btn" disabled>Backup Running&hellip;</button>
+        {{else if not .History}}
+        <button class="btn btn-primary"
+                hx-post="/api/backup"
+                hx-swap="none"
+                hx-confirm="This is the first backup. The remote destination will be synced to match the source — any existing files at the destination not present in the source will be deleted (--delete). Continue?">
+            Run Backup Now
+        </button>
+        {{else}}
+        <button class="btn btn-primary"
+                hx-post="/api/backup"
+                hx-swap="none">
+            Run Backup Now
+        </button>
+        {{end}}
+    </div>
+</div>
+{{end}}
+
+{{define "history-table"}}
+<div id="history-table" hx-get="/fragment/history" hx-trigger="every 10s" hx-swap="outerHTML">
+    {{if .History}}
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Duration</th>
+                <th>Status</th>
+                <th>Log</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .History}}
+            <tr>
+                <td>{{formatTime .StartTime}}</td>
+                <td>{{.Duration}}</td>
+                <td>
+                    <span class="badge badge-sm {{statusClass .Status}}">{{.Status}}</span>
+                    {{if and (ne .Status "success") (ne .Status "running") (ne .Status "idle")}}
+                    <span class="exit-code">exit {{.ExitCode}}</span>
+                    {{end}}
+                </td>
+                <td>
+                    <button class="btn btn-sm"
+                            hx-get="/api/logs/{{.LogFile}}"
+                            hx-target="#log-content"
+                            hx-swap="innerHTML">
+                        View
+                    </button>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <p class="muted">No backup history yet.</p>
+    {{end}}
+</div>
+{{end}}

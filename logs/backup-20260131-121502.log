@@ -1,0 +1,12 @@
+=== Backup started at 2026-01-31T12:15:02-08:00 ===
+Command: rsync -avz --delete --stats -e ssh -i ~/.ssh/backup -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /Users/adityanath/docker/osint/ adita@192.168.254.91:/home/adita/
+
+Warning: Permanently added '192.168.254.91' (ED25519) to the list of known hosts.
+adita@192.168.254.91: Permission denied (publickey).
+rsync(81597): error: unexpected end of file
+rsync(81597): error: io_read_nonblocking
+rsync(81597): error: io_read_buf
+rsync(81597): error: io_read_int
+rsync(81597): warning: child 81598 exited with status 255
+
+=== Backup finished at 2026-01-31T12:15:02-08:00 (exit code: 255) ===
