@@ -50,6 +50,7 @@ func testServer(t *testing.T) (*Server, *BackupExecutor) {
 <div id="status">{{.Status}}</div>
 <div id="source">{{.Source}}</div>
 <div id="dest">{{.Dest}}</div>
+<div id="configured">{{.Configured}}</div>
 </body></html>
 {{end}}
 
@@ -59,6 +60,10 @@ func testServer(t *testing.T) (*Server, *BackupExecutor) {
 
 {{define "history-table"}}
 <div id="history">{{range .History}}<div>{{.ID}}</div>{{end}}</div>
+{{end}}
+
+{{define "settings-form"}}
+<div id="settings-form"><input name="source_path" value="{{.Settings.SourcePath}}"></div>
 {{end}}
 `
 
@@ -500,5 +505,123 @@ func TestHandler_RemoteWarningFragment_WithHistory(t *testing.T) {
 	body := w.Body.String()
 	if strings.Contains(body, "already contains files") {
 		t.Error("should not show warning when backup history exists")
+	}
+}
+
+func TestHandler_APIStatus_Configured(t *testing.T) {
+	srv, _ := testServer(t)
+
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/api/status", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	var data DashboardData
+	json.NewDecoder(w.Body).Decode(&data)
+
+	if !data.Configured {
+		t.Error("expected Configured=true when testConfig has all transfer fields")
+	}
+}
+
+func TestHandler_Settings_GET(t *testing.T) {
+	srv, _ := testServer(t)
+
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/api/settings", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("GET /api/settings status = %d, want 200", w.Code)
+	}
+
+	var settings TransferSettings
+	if err := json.NewDecoder(w.Body).Decode(&settings); err != nil {
+		t.Fatalf("failed to decode settings: %v", err)
+	}
+	if settings.SourcePath != "/mnt/plex-media" {
+		t.Errorf("source_path = %q, want /mnt/plex-media", settings.SourcePath)
+	}
+}
+
+func TestHandler_Settings_POST(t *testing.T) {
+	srv, _ := testServer(t)
+
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+
+	body := strings.NewReader("source_path=/data&remote_host=user@host&remote_path=/backup&ssh_key_path=~/.ssh/key")
+	req := httptest.NewRequest("POST", "/api/settings", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("POST /api/settings status = %d, want 303", w.Code)
+	}
+
+	// Verify config was updated
+	if srv.cfg.SourcePath != "/data" {
+		t.Errorf("cfg.SourcePath = %q, want /data", srv.cfg.SourcePath)
+	}
+	if srv.cfg.RemoteHost != "user@host" {
+		t.Errorf("cfg.RemoteHost = %q, want user@host", srv.cfg.RemoteHost)
+	}
+}
+
+func TestHandler_Settings_POST_MissingFields(t *testing.T) {
+	srv, _ := testServer(t)
+
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+
+	body := strings.NewReader("source_path=/data")
+	req := httptest.NewRequest("POST", "/api/settings", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("POST /api/settings with missing fields status = %d, want 400", w.Code)
+	}
+}
+
+func TestHandler_Settings_MethodNotAllowed(t *testing.T) {
+	srv, _ := testServer(t)
+
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+
+	req := httptest.NewRequest("DELETE", "/api/settings", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("DELETE /api/settings status = %d, want 405", w.Code)
+	}
+}
+
+func TestHandler_SettingsFragment(t *testing.T) {
+	srv, _ := testServer(t)
+
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/fragment/settings", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("GET /fragment/settings = %d, want 200", w.Code)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "settings-form") {
+		t.Errorf("fragment should contain settings-form, got: %s", body)
 	}
 }

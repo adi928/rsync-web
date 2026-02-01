@@ -1,10 +1,10 @@
 package main
 
 import (
-	"log"
 	"time"
 
 	"github.com/robfig/cron/v3"
+	"github.com/rs/zerolog/log"
 )
 
 type Scheduler struct {
@@ -24,9 +24,9 @@ func NewScheduler(executor *BackupExecutor, schedule string) (*Scheduler, error)
 	}
 
 	id, err := c.AddFunc(schedule, func() {
-		log.Println("scheduled backup triggered")
+		log.Info().Msg("scheduled backup triggered")
 		if err := executor.Run(); err != nil {
-			log.Printf("scheduled backup skipped: %v", err)
+			log.Warn().Err(err).Msg("scheduled backup skipped")
 		}
 	})
 	if err != nil {
@@ -39,13 +39,13 @@ func NewScheduler(executor *BackupExecutor, schedule string) (*Scheduler, error)
 
 func (s *Scheduler) Start() {
 	s.cron.Start()
-	log.Printf("scheduler started with schedule: %s", s.schedule)
+	log.Info().Str("schedule", s.schedule).Msg("scheduler started")
 }
 
 func (s *Scheduler) Stop() {
 	ctx := s.cron.Stop()
 	<-ctx.Done()
-	log.Println("scheduler stopped")
+	log.Info().Msg("scheduler stopped")
 }
 
 // NextRun returns the next scheduled backup time.

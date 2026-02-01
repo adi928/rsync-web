@@ -3,33 +3,46 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
 	configPath := flag.String("config", "config.yaml", "path to configuration file")
 	flag.Parse()
 
 	cfg, err := LoadConfig(*configPath)
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		log.Fatal().Err(err).Msg("failed to load config")
 	}
 
-	log.Printf("source:   %s", cfg.SourcePath)
-	log.Printf("dest:     %s:%s", cfg.RemoteHost, cfg.RemotePath)
-	log.Printf("schedule: %s", cfg.Schedule)
-	log.Printf("listen:   %s", cfg.ListenAddr)
+	// Load saved transfer settings (source, destination, SSH key) from settings.json
+	if err := cfg.LoadTransferSettings(); err != nil {
+		log.Warn().Err(err).Msg("could not load saved settings")
+	}
+
+	if cfg.TransferConfigured() {
+		log.Info().Str("source", cfg.SourcePath).Msg("source configured")
+		log.Info().Str("dest", cfg.RemoteHost+":"+cfg.RemotePath).Msg("destination configured")
+	} else {
+		log.Info().Msg("transfer settings not yet configured — use the web UI to set them")
+	}
+	log.Info().Str("schedule", cfg.Schedule).Msg("schedule configured")
+	log.Info().Str("addr", cfg.ListenAddr).Msg("listen address configured")
 
 	executor := NewBackupExecutor(cfg)
 
 	scheduler, err := NewScheduler(executor, cfg.Schedule)
 	if err != nil {
-		log.Fatalf("invalid cron schedule %q: %v", cfg.Schedule, err)
+		log.Fatal().Err(err).Str("schedule", cfg.Schedule).Msg("invalid cron schedule")
 	}
 	scheduler.Start()
 
@@ -47,22 +60,22 @@ func main() {
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		log.Printf("dashboard available at http://localhost%s", cfg.ListenAddr)
+		log.Info().Str("url", "http://localhost"+cfg.ListenAddr).Msg("dashboard available")
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("http server error: %v", err)
+			log.Fatal().Err(err).Msg("http server error")
 		}
 	}()
 
 	<-done
-	log.Println("shutting down...")
+	log.Info().Msg("shutting down...")
 
 	scheduler.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(ctx); err != nil {
-		log.Printf("http shutdown error: %v", err)
+		log.Error().Err(err).Msg("http shutdown error")
 	}
 
-	log.Println("stopped")
+	log.Info().Msg("stopped")
 }

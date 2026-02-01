@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -44,20 +46,79 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 func (c *Config) validate() error {
-	if c.SourcePath == "" {
-		return fmt.Errorf("source_path is required")
-	}
-	if c.RemoteHost == "" {
-		return fmt.Errorf("remote_host is required")
-	}
-	if c.RemotePath == "" {
-		return fmt.Errorf("remote_path is required")
-	}
-	if c.SSHKeyPath == "" {
-		return fmt.Errorf("ssh_key_path is required")
-	}
 	if c.Schedule == "" {
 		return fmt.Errorf("schedule is required")
+	}
+	return nil
+}
+
+// TransferConfigured returns true if all transfer-related settings are set.
+func (c *Config) TransferConfigured() bool {
+	return c.SourcePath != "" && c.RemoteHost != "" && c.RemotePath != "" && c.SSHKeyPath != ""
+}
+
+// SettingsFilePath returns the path to the persisted transfer settings file.
+func (c *Config) SettingsFilePath() string {
+	return filepath.Join(c.LogDir, "settings.json")
+}
+
+// TransferSettings holds the user-configurable transfer fields.
+type TransferSettings struct {
+	SourcePath   string `json:"source_path"`
+	SourceIsFile bool   `json:"source_is_file"`
+	RemoteHost   string `json:"remote_host"`
+	RemotePath   string `json:"remote_path"`
+	SSHKeyPath   string `json:"ssh_key_path"`
+}
+
+// ApplyTransferSettings updates the config with values from TransferSettings.
+func (c *Config) ApplyTransferSettings(s TransferSettings) {
+	c.SourcePath = s.SourcePath
+	c.SourceIsFile = s.SourceIsFile
+	c.RemoteHost = s.RemoteHost
+	c.RemotePath = s.RemotePath
+	c.SSHKeyPath = s.SSHKeyPath
+}
+
+// GetTransferSettings extracts the current transfer settings from the config.
+func (c *Config) GetTransferSettings() TransferSettings {
+	return TransferSettings{
+		SourcePath:   c.SourcePath,
+		SourceIsFile: c.SourceIsFile,
+		RemoteHost:   c.RemoteHost,
+		RemotePath:   c.RemotePath,
+		SSHKeyPath:   c.SSHKeyPath,
+	}
+}
+
+// LoadTransferSettings reads transfer settings from the settings file and applies them.
+func (c *Config) LoadTransferSettings() error {
+	data, err := os.ReadFile(c.SettingsFilePath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // no saved settings yet
+		}
+		return fmt.Errorf("reading settings file: %w", err)
+	}
+	var s TransferSettings
+	if err := json.Unmarshal(data, &s); err != nil {
+		return fmt.Errorf("parsing settings file: %w", err)
+	}
+	c.ApplyTransferSettings(s)
+	return nil
+}
+
+// SaveTransferSettings writes the current transfer settings to the settings file.
+func (c *Config) SaveTransferSettings() error {
+	if err := os.MkdirAll(filepath.Dir(c.SettingsFilePath()), 0755); err != nil {
+		return fmt.Errorf("creating settings directory: %w", err)
+	}
+	data, err := json.MarshalIndent(c.GetTransferSettings(), "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshalling settings: %w", err)
+	}
+	if err := os.WriteFile(c.SettingsFilePath(), data, 0644); err != nil {
+		return fmt.Errorf("writing settings file: %w", err)
 	}
 	return nil
 }

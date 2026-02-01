@@ -1,1 +1,5 @@
 config.yaml
+.serena/.gitignore
+.serena/project.yml
+.serena/memories/project_overview.md
+.serena/memories/suggested_commands.md

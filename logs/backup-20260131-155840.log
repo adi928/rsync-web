@@ -1,0 +1,23 @@
+=== Backup started at 2026-01-31T15:58:40-08:00 ===
+Command: rsync -avz --delete --partial --stats -e ssh -i ~/.ssh/backup -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /Users/adityanath/anthropic-jd.txt adita@192.168.254.91:/home/adita/backup-test-1/
+
+Warning: Permanently added '192.168.254.91' (ED25519) to the list of known hosts.
+Transfer starting: 1 files
+created directory /home/adita/backup-test-1
+anthropic-jd.txt
+Number of files: 1
+Number of files transferred: 1
+Total file size: 6053 B
+Total transferred file size: 6053 B
+Unmatched data: 6053 B
+Matched data: 0 B
+File list size: 79 B
+File list generation time: 0.010 seconds
+File list transfer time: 0.004 seconds
+Total sent: 2860 B
+Total received: 42 B
+
+sent 2860 bytes  received 42 bytes  180248 bytes/sec
+total size is 6053  speedup is 2.09
+
+=== Backup finished at 2026-01-31T15:58:41-08:00 (exit code: 0) ===

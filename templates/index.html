@@ -11,12 +11,26 @@
     <div class="container">
         <header>
             <h1>Plex Backup</h1>
+            {{if .Configured}}
             <p class="subtitle">rsync mirror &middot; {{.Source}} &rarr; {{.Dest}}</p>
+            {{else}}
+            <p class="subtitle">Configure your backup settings below to get started.</p>
+            {{end}}
         </header>
 
+        {{if not .Configured}}
+        <section class="section">
+            {{template "settings-form" .}}
+        </section>
+        {{else}}
         <div id="status-card" hx-get="/fragment/status" hx-trigger="every 5s, backup-started from:body" hx-swap="outerHTML">
             {{template "status-card" .}}
         </div>
+
+        <section class="section">
+            <h2>Settings</h2>
+            {{template "settings-form" .}}
+        </section>
 
         <section class="section">
             <h2>History</h2>
@@ -31,6 +45,7 @@
                 <p class="muted">Select a backup run above to view its log.</p>
             </div>
         </section>
+        {{end}}
     </div>
 </body>
 </html>
@@ -88,6 +103,8 @@
     <div class="actions">
         {{if eq .Status "running"}}
         <button class="btn" disabled>Backup Running&hellip;</button>
+        {{else if not .Configured}}
+        <button class="btn" disabled>Configure Settings First</button>
         {{else if not .History}}
         <button class="btn btn-primary"
                 hx-post="/api/backup"
@@ -103,6 +120,57 @@
         </button>
         {{end}}
     </div>
+</div>
+{{end}}
+
+{{define "settings-form"}}
+<div id="settings-form" class="card settings-card">
+    {{if not .Configured}}
+    <h2>Setup Required</h2>
+    <p class="muted settings-desc">Enter your rsync transfer details to get started.</p>
+    {{end}}
+    <form hx-post="/api/settings" hx-target="#settings-form" hx-swap="outerHTML">
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="source_path">Source Path</label>
+                <input type="text" id="source_path" name="source_path"
+                       value="{{.Settings.SourcePath}}"
+                       placeholder="/mnt/plex-media" required>
+                <span class="form-hint">Local path to back up</span>
+            </div>
+            <div class="form-group form-checkbox">
+                <label>
+                    <input type="checkbox" name="source_is_file"
+                           {{if .Settings.SourceIsFile}}checked{{end}}>
+                    Source is a single file
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="remote_host">Remote Host</label>
+                <input type="text" id="remote_host" name="remote_host"
+                       value="{{.Settings.RemoteHost}}"
+                       placeholder="user@backup-server.example.com" required>
+                <span class="form-hint">SSH destination in user@host format</span>
+            </div>
+            <div class="form-group">
+                <label for="remote_path">Remote Path</label>
+                <input type="text" id="remote_path" name="remote_path"
+                       value="{{.Settings.RemotePath}}"
+                       placeholder="/backups/plex-media" required>
+                <span class="form-hint">Directory on the remote server</span>
+            </div>
+            <div class="form-group">
+                <label for="ssh_key_path">SSH Key Path</label>
+                <input type="text" id="ssh_key_path" name="ssh_key_path"
+                       value="{{.Settings.SSHKeyPath}}"
+                       placeholder="~/.ssh/plex-backup" required>
+                <span class="form-hint">Private key (must have no passphrase)</span>
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+        </div>
+    </form>
 </div>
 {{end}}
 

@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
+
+	"github.com/rs/zerolog/log"
 	"path/filepath"
 	"strings"
 	"time"
@@ -80,9 +81,11 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/history", s.handleHistory)
 	mux.HandleFunc("/api/logs/", s.handleLogs)
 	mux.HandleFunc("/api/remote-check", s.handleRemoteCheck)
+	mux.HandleFunc("/api/settings", s.handleSettings)
 	mux.HandleFunc("/fragment/status", s.handleStatusFragment)
 	mux.HandleFunc("/fragment/history", s.handleHistoryFragment)
 	mux.HandleFunc("/fragment/remote-warning", s.handleRemoteWarningFragment)
+	mux.HandleFunc("/fragment/settings", s.handleSettingsFragment)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 }
 
@@ -96,7 +99,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	data := s.dashboardData()
 	if err := s.templates.ExecuteTemplate(w, "index.html", data); err != nil {
-		log.Printf("template error: %v", err)
+		log.Error().Err(err).Msg("template error")
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
 }
@@ -216,7 +219,7 @@ func (s *Server) handleStatusFragment(w http.ResponseWriter, r *http.Request) {
 	data := s.dashboardData()
 	w.Header().Set("Content-Type", "text/html")
 	if err := s.templates.ExecuteTemplate(w, "status-card", data); err != nil {
-		log.Printf("template error: %v", err)
+		log.Error().Err(err).Msg("template error")
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
 }
@@ -225,7 +228,76 @@ func (s *Server) handleHistoryFragment(w http.ResponseWriter, r *http.Request) {
 	data := s.dashboardData()
 	w.Header().Set("Content-Type", "text/html")
 	if err := s.templates.ExecuteTemplate(w, "history-table", data); err != nil {
-		log.Printf("template error: %v", err)
+		log.Error().Err(err).Msg("template error")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}
+
+// --- Settings handlers ---
+
+func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(s.cfg.GetTransferSettings())
+
+	case http.MethodPost:
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "invalid form data", http.StatusBadRequest)
+			return
+		}
+
+		settings := TransferSettings{
+			SourcePath:   strings.TrimSpace(r.FormValue("source_path")),
+			SourceIsFile: r.FormValue("source_is_file") == "on",
+			RemoteHost:   strings.TrimSpace(r.FormValue("remote_host")),
+			RemotePath:   strings.TrimSpace(r.FormValue("remote_path")),
+			SSHKeyPath:   strings.TrimSpace(r.FormValue("ssh_key_path")),
+		}
+
+		// Validate required fields
+		if settings.SourcePath == "" || settings.RemoteHost == "" || settings.RemotePath == "" || settings.SSHKeyPath == "" {
+			if r.Header.Get("HX-Request") == "true" {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`<div class="status-hint failed-hint">All fields are required.</div>`))
+				return
+			}
+			http.Error(w, "all fields are required", http.StatusBadRequest)
+			return
+		}
+
+		s.cfg.ApplyTransferSettings(settings)
+		if err := s.cfg.SaveTransferSettings(); err != nil {
+			log.Error().Err(err).Msg("failed to save settings")
+			if r.Header.Get("HX-Request") == "true" {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(`<div class="status-hint failed-hint">Failed to save settings.</div>`))
+				return
+			}
+			http.Error(w, "failed to save settings", http.StatusInternalServerError)
+			return
+		}
+
+		log.Info().Str("source", settings.SourcePath).Str("dest", settings.RemoteHost+":"+settings.RemotePath).Msg("settings updated")
+
+		if r.Header.Get("HX-Request") == "true" {
+			w.Header().Set("HX-Trigger", "settings-saved")
+			w.Header().Set("HX-Redirect", "/")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleSettingsFragment(w http.ResponseWriter, r *http.Request) {
+	data := s.dashboardData()
+	w.Header().Set("Content-Type", "text/html")
+	if err := s.templates.ExecuteTemplate(w, "settings-form", data); err != nil {
+		log.Error().Err(err).Msg("template error")
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
 }
@@ -233,13 +305,15 @@ func (s *Server) handleHistoryFragment(w http.ResponseWriter, r *http.Request) {
 // --- Data ---
 
 type DashboardData struct {
-	Status   BackupStatus `json:"status"`
-	LastRun  *BackupRun   `json:"last_run"`
-	NextRun  time.Time    `json:"next_run"`
-	History  []BackupRun  `json:"history"`
-	Schedule string       `json:"schedule"`
-	Source   string       `json:"source"`
-	Dest     string       `json:"dest"`
+	Status     BackupStatus     `json:"status"`
+	LastRun    *BackupRun       `json:"last_run"`
+	NextRun    time.Time        `json:"next_run"`
+	History    []BackupRun      `json:"history"`
+	Schedule   string           `json:"schedule"`
+	Source     string           `json:"source"`
+	Dest       string           `json:"dest"`
+	Configured bool             `json:"configured"`
+	Settings   TransferSettings `json:"settings"`
 }
 
 func (s *Server) dashboardData() DashboardData {
@@ -253,12 +327,14 @@ func (s *Server) dashboardData() DashboardData {
 	}
 
 	return DashboardData{
-		Status:   status,
-		LastRun:  last,
-		NextRun:  s.scheduler.NextRun(),
-		History:  history,
-		Schedule: s.cfg.Schedule,
-		Source:   s.cfg.SourcePath,
-		Dest:     s.cfg.RemoteHost + ":" + s.cfg.RemotePath,
+		Status:     status,
+		LastRun:    last,
+		NextRun:    s.scheduler.NextRun(),
+		History:    history,
+		Schedule:   s.cfg.Schedule,
+		Source:     s.cfg.SourcePath,
+		Dest:       s.cfg.RemoteHost + ":" + s.cfg.RemotePath,
+		Configured: s.cfg.TransferConfigured(),
+		Settings:   s.cfg.GetTransferSettings(),
 	}
 }

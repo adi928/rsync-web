@@ -3,8 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
+
+	"github.com/rs/zerolog/log"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -91,8 +92,11 @@ func (ex *BackupExecutor) LastRun() *BackupRun {
 	return &cp
 }
 
-// Run starts a backup. Returns an error if one is already running.
+// Run starts a backup. Returns an error if one is already running or settings are not configured.
 func (ex *BackupExecutor) Run() error {
+	if !ex.cfg.TransferConfigured() {
+		return fmt.Errorf("transfer settings not configured — use the web UI to set source, destination, and SSH key")
+	}
 	ex.mu.Lock()
 	if ex.status == StatusRunning {
 		ex.mu.Unlock()
@@ -120,12 +124,12 @@ func (ex *BackupExecutor) Run() error {
 func (ex *BackupExecutor) execute(run *BackupRun, logPath string) {
 	// Ensure log directory exists
 	if err := os.MkdirAll(ex.cfg.LogDir, 0755); err != nil {
-		log.Printf("failed to create log dir: %v", err)
+		log.Error().Err(err).Msg("failed to create log dir")
 	}
 
 	logFile, err := os.Create(logPath)
 	if err != nil {
-		log.Printf("failed to create log file: %v", err)
+		log.Error().Err(err).Msg("failed to create log file")
 		ex.finishRun(run, 1, "failed to create log file")
 		return
 	}
@@ -273,7 +277,7 @@ func (ex *BackupExecutor) loadHistory() {
 	}
 	var runs []BackupRun
 	if err := json.Unmarshal(data, &runs); err != nil {
-		log.Printf("failed to parse history: %v", err)
+		log.Error().Err(err).Msg("failed to parse history")
 		return
 	}
 	ex.history = runs
@@ -287,11 +291,11 @@ func (ex *BackupExecutor) loadHistory() {
 func (ex *BackupExecutor) saveHistory() {
 	data, err := json.MarshalIndent(ex.history, "", "  ")
 	if err != nil {
-		log.Printf("failed to marshal history: %v", err)
+		log.Error().Err(err).Msg("failed to marshal history")
 		return
 	}
 	if err := os.WriteFile(ex.historyPath(), data, 0644); err != nil {
-		log.Printf("failed to write history: %v", err)
+		log.Error().Err(err).Msg("failed to write history")
 	}
 }
 

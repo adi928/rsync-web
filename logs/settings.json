@@ -1,0 +1,7 @@
+{
+  "source_path": "/Users/adityanath/anthropic-jd.txt",
+  "source_is_file": true,
+  "remote_host": "adita@192.168.254.91",
+  "remote_path": "/home/adita/backup-test-1",
+  "ssh_key_path": "~/.ssh/backup"
+}

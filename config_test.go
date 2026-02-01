@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,50 +99,110 @@ func TestLoadConfig_InvalidYAML(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_MissingRequiredFields(t *testing.T) {
-	tests := []struct {
-		name    string
-		yaml    string
-		wantErr string
-	}{
-		{
-			name:    "missing source_path",
-			yaml:    "remote_host: h\nremote_path: p\nssh_key_path: k\nschedule: '0 * * * *'",
-			wantErr: "source_path is required",
-		},
-		{
-			name:    "missing remote_host",
-			yaml:    "source_path: s\nremote_path: p\nssh_key_path: k\nschedule: '0 * * * *'",
-			wantErr: "remote_host is required",
-		},
-		{
-			name:    "missing remote_path",
-			yaml:    "source_path: s\nremote_host: h\nssh_key_path: k\nschedule: '0 * * * *'",
-			wantErr: "remote_path is required",
-		},
-		{
-			name:    "missing ssh_key_path",
-			yaml:    "source_path: s\nremote_host: h\nremote_path: p\nschedule: '0 * * * *'",
-			wantErr: "ssh_key_path is required",
-		},
-		{
-			name:    "missing schedule",
-			yaml:    "source_path: s\nremote_host: h\nremote_path: p\nssh_key_path: k",
-			wantErr: "schedule is required",
-		},
+func TestLoadConfig_MissingSchedule(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTestConfig(t, dir, "source_path: s\nremote_host: h\nremote_path: p\nssh_key_path: k")
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected error for missing schedule")
+	}
+	if !strings.Contains(err.Error(), "schedule is required") {
+		t.Errorf("error = %q, want it to mention 'schedule is required'", err)
+	}
+}
+
+func TestLoadConfig_TransferFieldsOptional(t *testing.T) {
+	// Config should load successfully without transfer fields — they are set via the web UI
+	dir := t.TempDir()
+	path := writeTestConfig(t, dir, `schedule: "0 3 * * *"`)
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if cfg.TransferConfigured() {
+		t.Error("TransferConfigured() should be false when transfer fields are empty")
+	}
+}
+
+func TestTransferConfigured(t *testing.T) {
+	cfg := &Config{
+		SourcePath: "/src",
+		RemoteHost: "u@h",
+		RemotePath: "/dst",
+		SSHKeyPath: "/key",
+		Schedule:   "0 3 * * *",
+	}
+	if !cfg.TransferConfigured() {
+		t.Error("TransferConfigured() should be true when all fields are set")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir := t.TempDir()
-			path := writeTestConfig(t, dir, tt.yaml)
-			_, err := LoadConfig(path)
-			if err == nil {
-				t.Fatalf("expected error containing %q", tt.wantErr)
-			}
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("error = %q, want it to contain %q", err, tt.wantErr)
-			}
-		})
+	cfg.SSHKeyPath = ""
+	if cfg.TransferConfigured() {
+		t.Error("TransferConfigured() should be false when ssh_key_path is empty")
+	}
+}
+
+func TestTransferSettings_SaveAndLoad(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &Config{
+		Schedule: "0 3 * * *",
+		LogDir:   dir,
+	}
+
+	// Apply and save
+	cfg.ApplyTransferSettings(TransferSettings{
+		SourcePath:   "/mnt/data",
+		SourceIsFile: true,
+		RemoteHost:   "user@host",
+		RemotePath:   "/backups",
+		SSHKeyPath:   "~/.ssh/key",
+	})
+	if err := cfg.SaveTransferSettings(); err != nil {
+		t.Fatalf("SaveTransferSettings() error: %v", err)
+	}
+
+	// Verify file was written
+	data, err := os.ReadFile(cfg.SettingsFilePath())
+	if err != nil {
+		t.Fatalf("settings file not found: %v", err)
+	}
+	var saved TransferSettings
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatalf("invalid JSON in settings file: %v", err)
+	}
+	if saved.SourcePath != "/mnt/data" {
+		t.Errorf("saved source_path = %q, want /mnt/data", saved.SourcePath)
+	}
+	if !saved.SourceIsFile {
+		t.Error("saved source_is_file should be true")
+	}
+
+	// Load into a fresh config
+	cfg2 := &Config{
+		Schedule: "0 3 * * *",
+		LogDir:   dir,
+	}
+	if err := cfg2.LoadTransferSettings(); err != nil {
+		t.Fatalf("LoadTransferSettings() error: %v", err)
+	}
+	if cfg2.SourcePath != "/mnt/data" {
+		t.Errorf("loaded source_path = %q, want /mnt/data", cfg2.SourcePath)
+	}
+	if cfg2.RemoteHost != "user@host" {
+		t.Errorf("loaded remote_host = %q, want user@host", cfg2.RemoteHost)
+	}
+	if !cfg2.TransferConfigured() {
+		t.Error("TransferConfigured() should be true after loading settings")
+	}
+}
+
+func TestLoadTransferSettings_NoFile(t *testing.T) {
+	cfg := &Config{
+		Schedule: "0 3 * * *",
+		LogDir:   t.TempDir(),
+	}
+	// Should not error when settings file doesn't exist
+	if err := cfg.LoadTransferSettings(); err != nil {
+		t.Fatalf("LoadTransferSettings() should not error for missing file: %v", err)
 	}
 }
